@@ -12,48 +12,45 @@ from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import PolynomialFeatures
 
-# Local import
-from challenge_utils import build_training_data, relative_squared_error, train_test_split, save_onnx, load_onnx
+# Assuming challenge_utils provides necessary functions directly
+from challenge_utils import build_training_data, relative_squared_error, save_onnx, load_onnx
 
 # Building training/testing set data
 student_data_path = 'students_drahi_production_consumption_hourly.csv'
+# Assume this function correctly returns aligned target_time, targets, and predictors
 target_time, targets, predictors = build_training_data(student_data_path)
 
-# Correctly handle the reshaping for polynomial features transformation
-# Ensure we're using the correct shape for predictors before transformation
-predictors_reshaped = predictors.reshape(-1, predictors.shape[-1]) if len(predictors.shape) > 1 else predictors.reshape(-1, 1)
+# Ensure the shape of predictors is compatible for polynomial transformation
+if predictors.ndim == 1:
+    predictors = predictors.reshape(-1, 1)
 
-# Generate Polynomial Features for the reshaped predictors
-degree = 2  # Example degree
-poly = PolynomialFeatures(degree=degree)
-predictors_poly = poly.fit_transform(predictors_reshaped)
+# Apply Polynomial Features transformation
+poly = PolynomialFeatures(degree=2)
+predictors_poly = poly.fit_transform(predictors)
 
-# Here we assume targets and predictors are already aligned correctly
-x_all_poly = predictors_poly
-y_all = targets
+# Ensure y_all matches the transformed predictors in size
+y_all = targets  # Assuming targets are correctly aligned with the original predictors
 
-# Assuming the previous split (train_test_split) is correct and doesn't need to be revised
-# Directly move to the model fitting and validation phase with correct shapes
+# Now, we ensure the GridSearch and subsequent steps use matched predictors and targets
+# Setup for GridSearchCV
+param_grid = {'alpha': np.logspace(-2, 10, 13)}
+grid = GridSearchCV(Ridge(), param_grid, scoring='neg_mean_squared_error', cv=5)
 
-# Model fitting and validation
-param_grid = {'alpha': np.logspace(-2, 10, 21)}
-grid = GridSearchCV(Ridge(), param_grid, cv=5, scoring='neg_mean_squared_error')
-grid.fit(x_all_poly, y_all)  # Ensure this uses the entire dataset correctly
+# Here we fit the model using the entire dataset, ensuring the sizes match
+grid.fit(predictors_poly, y_all)
 
-best_alpha = grid.best_params_['alpha']
-print('Best alpha from validation:', best_alpha)
+print(f"Best alpha from GridSearchCV: {grid.best_params_['alpha']}")
 
-best_estimator = grid.best_estimator_
-# Ensure we're using the correct dataset for predictions
-y_pred = best_estimator.predict(x_all_poly)
-RelativeMSE = relative_squared_error(y_pred, y_all)
-print('Best linear model RSE:', RelativeMSE)
+# Evaluate the best model found by GridSearchCV
+best_model = grid.best_estimator_
 
+# Assuming the evaluation and save/load process is handled correctly
 # Save the model
-print('Saving in ONNX format')
-save_onnx(best_estimator, 'linear_model.onnx', x_all_poly)
+save_onnx(best_model, 'polynomial_ridge_model.onnx')
 
-# Load and run saved model for a consistency check
-y_pred_onnx = load_onnx('linear_model.onnx', x_all_poly)
-RelativeMSE = relative_squared_error(y_pred_onnx, y_all)
-print('Loaded from ONNX file RSE:', RelativeMSE)
+# Load and evaluate the saved model
+# This step assumes the load_onnx function correctly handles the model loading
+# and that you have a mechanism to apply the same PolynomialFeatures transformation before prediction
+loaded_model_predictions = load_onnx('polynomial_ridge_model.onnx', predictors_poly)
+loaded_model_rse = relative_squared_error(loaded_model_predictions, y_all)
+print(f"RSE for the loaded model: {loaded_model_rse}")
