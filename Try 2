@@ -1,0 +1,55 @@
+import numpy as np
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+
+# Assuming challenge_utils.py contains these functions
+from challenge_utils import build_training_data, relative_squared_error, save_onnx
+
+try:
+    # Load and prepare data
+    student_data_path = 'students_drahi_production_consumption_hourly.csv'
+    target_time, targets, predictors = build_training_data(student_data_path)
+    X = predictors.reshape(len(targets), -1)
+    y = targets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Optimize Ridge regression model
+    param_grid = {'alpha': np.logspace(-2, 10, 21)}
+    grid_search = GridSearchCV(Ridge(), param_grid, cv=5, scoring='neg_mean_squared_error')
+    grid_search.fit(X_train, y_train)
+    best_alpha = grid_search.best_params_['alpha']
+    print('Best alpha:', best_alpha)
+
+    # Ridge regression with best alpha
+    ridge_reg = Ridge(alpha=best_alpha)
+    ridge_reg.fit(X_train, y_train)
+    y_pred_ridge = ridge_reg.predict(X_test)
+    rse_ridge = relative_squared_error(y_pred_ridge, y_test)
+    print('Ridge regression RSE:', rse_ridge)
+
+    # Polynomial model
+    degree = 2
+    poly_pipeline = make_pipeline(PolynomialFeatures(degree), Ridge(alpha=best_alpha))
+    poly_pipeline.fit(X_train, y_train)
+    y_pred_poly = poly_pipeline.predict(X_test)
+    rse_poly = relative_squared_error(y_pred_poly, y_test)
+    print('Polynomial model RSE:', rse_poly)
+
+    # Determine the best model and save it in ONNX format
+    if rse_poly < rse_ridge:
+        print('Saving Polynomial model in ONNX format')
+        model_to_save = poly_pipeline
+        model_name = 'polynomial_model.onnx'
+    else:
+        print('Saving Linear model in ONNX format')
+        model_to_save = ridge_reg
+        model_name = 'linear_model.onnx'
+
+    # Save the model
+    # Adjust save_onnx function to handle sklearn pipelines if needed
+    save_onnx(model_to_save, model_name, X_train.shape[1])
+
+except Exception as e:
+    print(f"An error occurred: {e}")
