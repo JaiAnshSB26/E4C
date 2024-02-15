@@ -27,32 +27,34 @@ reg.fit(x_train, y_train)
 y_pred = reg.predict(x_test)
 
 #  ──────────────────────────────────────────────────────────────────────────
-# Searching for optimal coefficients (validation)
+# Apply polynomial transformation to the entire dataset for consistency
+x_all_poly = poly.transform(x_all.reshape(-1, x_all.shape[-1]))
 
+# Searching for optimal coefficients (validation) with polynomial features
 param_grid = {'alpha': np.logspace(-2, 10, 21)}
-
 grid = GridSearchCV(Ridge(), param_grid, cv=5, scoring='neg_mean_squared_error')
-
-grid.fit(x_all, y_all) # using the entire dataset for validation
+grid.fit(x_all_poly, y_all)  # Use the transformed features
 
 best_alpha = grid.best_params_['alpha']
-best_rse = -grid.best_score_/np.mean((y_all-y_all.mean())**2)
+# Recalculate RSE based on polynomial features
+best_rse = -grid.best_score_/np.mean((y_all - y_all.mean()) ** 2)
 print('Best alpha from validation:', best_alpha)
 
 best_estimator = grid.best_estimator_
-y_pred = best_estimator.predict(x_all)
+# Predictions also need to be done on the polynomial-transformed features
+y_pred = best_estimator.predict(x_all_poly)
 RelativeMSE = relative_squared_error(y_pred, y_all)
 print('Best linear model RSE:', RelativeMSE)
 
-#  ──────────────────────────────────────────────────────────────────────────
 # Save best version of simple model
-
+# Note: When saving and later loading the model, ensure that the input data is transformed with the same polynomial features
 print('Saving in ONNX format')
-save_onnx(best_estimator, 'linear_model.onnx', x_train)
+# This step assumes the model pipeline includes polynomial feature transformation or that it's applied to the data before prediction
+save_onnx(best_estimator, 'linear_model.onnx', x_train_poly)  # Note: Adjust saving function if necessary to handle polynomial features
 
-#  ──────────────────────────────────────────────────────────────────────────
-# Load and run saved simple model (the function combines the actions)
-
-y_pred_onnx = load_onnx('linear_model.onnx', x_all)
+# Load and run saved simple model
+# Ensure to transform the input data with polynomial features before prediction
+y_pred_onnx = load_onnx('linear_model.onnx', x_all_poly)
 RelativeMSE = relative_squared_error(y_pred_onnx, y_all)
 print('Loaded from ONNX file RSE:', RelativeMSE)
+
