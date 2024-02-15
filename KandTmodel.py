@@ -25,8 +25,10 @@ if predictors.ndim == 1:
     predictors = predictors.reshape(-1, 1)
 
 # Apply Polynomial Features transformation
+ntot = len(targets)
+x_all = predictors.reshape(ntot, -1)
 poly = PolynomialFeatures(degree=2)
-predictors_poly = poly.fit_transform(predictors)
+predictors_poly = poly.fit_transform(x_all)
 
 # Ensure y_all matches the transformed predictors in size
 y_all = targets  # Assuming targets are correctly aligned with the original predictors
